@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#0b0d0e" />
+<title>FOOTSCAN // 01</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0d0e;
+    --bg-2: #111416;
+    --ink: #f5f0e8;
+    --ink-dim: #8a8680;
+    --lime: #c4f542;
+    --lime-dim: #6a8420;
+    --warn: #ff5544;
+    --line: rgba(245, 240, 232, 0.12);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 14px;
+    line-height: 1.4;
+    overscroll-behavior: none;
+  }
+
+  /* ---------- SCREEN SYSTEM ---------- */
+  .screen {
+    position: fixed;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    opacity: 0;
+    transition: opacity .35s ease;
+  }
+  .screen.active { display: flex; opacity: 1; }
+
+  /* ---------- WELCOME SCREEN ---------- */
+  #welcome {
+    padding: max(env(safe-area-inset-top), 24px) 24px max(env(safe-area-inset-bottom), 24px);
+    background:
+      radial-gradient(circle at 50% 110%, rgba(196, 245, 66, 0.08), transparent 55%),
+      linear-gradient(180deg, #0b0d0e 0%, #0a0b0c 100%);
+  }
+
+  .hud {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: var(--ink-dim);
+    text-transform: uppercase;
+  }
+  .hud .dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    background: var(--lime);
+    border-radius: 50%;
+    margin-right: 6px;
+    box-shadow: 0 0 8px var(--lime);
+    animation: blink 1.4s infinite;
+  }
+  @keyframes blink { 0%,60% { opacity: 1; } 70%,100% { opacity: .3; } }
+
+  .hero {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 24px 4px;
+  }
+  .eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.24em;
+    color: var(--lime);
+    text-transform: uppercase;
+    margin-bottom: 22px;
+  }
+  .eyebrow::before {
+    content: "→";
+    margin-right: 10px;
+  }
+  .title {
+    font-family: 'Instrument Serif', serif;
+    font-weight: 400;
+    font-size: clamp(56px, 17vw, 96px);
+    line-height: 0.92;
+    letter-spacing: -0.02em;
+    margin-bottom: 22px;
+  }
+  .title em {
+    font-style: italic;
+    color: var(--lime);
+  }
+  .subtitle {
+    font-size: 13px;
+    color: var(--ink-dim);
+    max-width: 340px;
+    letter-spacing: 0.01em;
+    line-height: 1.55;
+  }
+
+  .specs {
+    margin-top: 36px;
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px 24px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .spec-label { color: var(--ink-dim); display: block; margin-bottom: 2px; }
+  .spec-value { color: var(--ink); }
+
+  .start-btn {
+    margin-top: auto;
+    width: 100%;
+    background: var(--lime);
+    color: #0a0b0c;
+    border: none;
+    padding: 22px 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 2px;
+    transition: transform .15s ease, background .2s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .start-btn:active { transform: scale(0.985); background: #b8e836; }
+  .start-btn .arrow {
+    font-family: 'Instrument Serif', serif;
+    font-size: 22px;
+    font-style: italic;
+    letter-spacing: 0;
+    transition: transform .3s ease;
+  }
+  .start-btn:hover .arrow { transform: translateX(6px); }
+
+  .error-msg {
+    margin-top: 14px;
+    font-size: 11px;
+    color: var(--warn);
+    letter-spacing: 0.06em;
+    min-height: 16px;
+    text-align: center;
+  }
+
+  /* ---------- SCAN SCREEN ---------- */
+  #scan {
+    background: #000;
+  }
+  video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 1;
+  }
+  .scan-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: max(env(safe-area-inset-top), 20px) 20px max(env(safe-area-inset-bottom), 20px);
+    pointer-events: none;
+  }
+  .scan-overlay > * { pointer-events: auto; }
+
+  .scan-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: var(--ink);
+    text-transform: uppercase;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+  }
+  .scan-top .live::before {
+    content: "●";
+    color: var(--lime);
+    margin-right: 6px;
+    animation: blink 1.4s infinite;
+  }
+  .close-btn {
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: var(--ink);
+    border: 1px solid rgba(255,255,255,0.15);
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    font-family: inherit;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .close-btn:active { transform: scale(0.94); }
+  .flip-btn {
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: var(--ink);
+    border: 1px solid rgba(255,255,255,0.15);
+    padding: 0 12px;
+    height: 36px;
+    border-radius: 18px;
+    font-family: inherit;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    cursor: pointer;
+    margin-left: 8px;
+  }
+  .flip-btn:active { transform: scale(0.94); }
+
+  /* Full-screen flash for visual haptic fallback */
+  .flash {
+    position: fixed;
+    inset: 0;
+    background: var(--warn);
+    z-index: 9;
+    opacity: 0;
+    pointer-events: none;
+    mix-blend-mode: screen;
+    transition: opacity 0.1s ease;
+  }
+  .flash.pulse { animation: flashPulse 0.6s ease; }
+  @keyframes flashPulse {
+    0%, 100% { opacity: 0; }
+    15% { opacity: 0.5; }
+    30% { opacity: 0; }
+    45% { opacity: 0.5; }
+    60% { opacity: 0; }
+  }
+
+  /* Foot frame overlay */
+  .foot-frame-wrap {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .foot-frame {
+    width: 62vw;
+    max-width: 300px;
+    height: auto;
+    aspect-ratio: 3 / 7;
+    max-height: 78vh;
+    transition: filter .2s ease;
+  }
+  .foot-frame.alert { filter: drop-shadow(0 0 14px var(--warn)); }
+  .foot-frame #footPath {
+    fill: none;
+    stroke: var(--lime);
+    stroke-width: 2.5;
+    stroke-dasharray: 8 6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    filter: drop-shadow(0 0 6px rgba(196, 245, 66, 0.5));
+    transition: stroke .15s ease;
+  }
+  .foot-frame.alert #footPath {
+    stroke: var(--warn);
+    stroke-dasharray: 4 4;
+    animation: shake 0.3s ease;
+  }
+  .foot-frame #footGroup { transform-origin: 150px 350px; transition: transform .35s ease; }
+  .foot-frame.flipped #footGroup { transform: scaleX(-1); }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+  }
+  .corner {
+    stroke: var(--lime);
+    stroke-width: 2;
+    fill: none;
+  }
+
+  /* Scan line */
+  .scan-line {
+    position: absolute;
+    left: 6%; right: 6%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--lime), transparent);
+    opacity: 0.85;
+    box-shadow: 0 0 12px var(--lime);
+    animation: scanMove 3s linear infinite;
+  }
+  @keyframes scanMove {
+    0% { top: 15%; }
+    50% { top: 80%; }
+    100% { top: 15%; }
+  }
+
+  /* Bottom panel */
+  .scan-bottom {
+    background: linear-gradient(180deg, transparent, rgba(0,0,0,0.75));
+    backdrop-filter: blur(2px);
+    margin: 0 -20px -20px;
+    padding: 20px 20px max(env(safe-area-inset-bottom), 20px);
+    z-index: 2;
+  }
+  .status-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    color: var(--ink-dim);
+  }
+  .status-row .val { color: var(--lime); font-weight: 500; }
+  .status-row .val.warn { color: var(--warn); }
+  .status-bar {
+    height: 2px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+  }
+  .status-bar::after {
+    content: "";
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: linear-gradient(90deg, var(--lime-dim), var(--lime));
+    transform-origin: left;
+    transform: scaleX(0);
+    transition: transform .4s ease;
+    animation: progressFill 8s linear infinite;
+  }
+  @keyframes progressFill {
+    0% { transform: scaleX(0); }
+    100% { transform: scaleX(1); }
+  }
+  .instruction {
+    margin-top: 14px;
+    font-family: 'Instrument Serif', serif;
+    font-size: 22px;
+    line-height: 1.15;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .instruction em {
+    font-style: italic;
+    color: var(--lime);
+  }
+
+  /* Toast popup */
+  .toast {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0.9);
+    background: rgba(255, 85, 68, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    color: #fff;
+    padding: 22px 32px;
+    border-radius: 4px;
+    z-index: 10;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease;
+    text-align: center;
+    border: 1px solid rgba(255,255,255,0.2);
+    box-shadow: 0 20px 60px rgba(255, 85, 68, 0.4);
+    max-width: 80vw;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  .toast .toast-title {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: 34px;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .toast .toast-sub {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    opacity: 0.85;
+  }
+
+  /* Hidden analysis canvas */
+  #analysisCanvas { display: none; }
+
+  /* Noise texture overlay for welcome */
+  #welcome::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.96  0 0 0 0 0.94  0 0 0 0 0.91  0 0 0 0.04 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");
+    opacity: 0.6;
+    pointer-events: none;
+    mix-blend-mode: screen;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============= WELCOME SCREEN ============= -->
+<section id="welcome" class="screen active">
+  <div class="hud">
+    <span><span class="dot"></span>SYSTEM READY</span>
+    <span>V0.1 / DEMO</span>
+  </div>
+
+  <div class="hero">
+    <div class="eyebrow">Module 01 — Biometric capture</div>
+    <h1 class="title">Scan your<br><em>foot.</em></h1>
+    <p class="subtitle">Hold your phone steady, align your foot inside the dashed outline, and slowly rotate the camera around your foot. Keep it smooth — the device will guide you with haptics and prompts.</p>
+
+    <div class="specs">
+      <div><span class="spec-label">Camera</span><span class="spec-value">Rear / 1×</span></div>
+      <div><span class="spec-label">Haptics</span><span class="spec-value" id="hapticsSpec">Checking…</span></div>
+      <div><span class="spec-label">Motion</span><span class="spec-value">Gyroscope</span></div>
+      <div><span class="spec-label">Output</span><span class="spec-value">Preview only</span></div>
+    </div>
+  </div>
+
+  <button class="start-btn" id="startBtn">
+    <span>Start foot scan</span>
+    <span class="arrow">→</span>
+  </button>
+  <div class="error-msg" id="errorMsg"></div>
+</section>
+
+<!-- ============= SCAN SCREEN ============= -->
+<section id="scan" class="screen">
+  <video id="video" autoplay playsinline muted></video>
+
+  <!-- Foot-shaped frame overlay -->
+  <div class="foot-frame-wrap">
+    <svg class="foot-frame" id="footFrame" viewBox="0 0 300 700" xmlns="http://www.w3.org/2000/svg">
+      <!-- Corner brackets -->
+      <path class="corner" d="M10 40 L10 10 L40 10" />
+      <path class="corner" d="M260 10 L290 10 L290 40" />
+      <path class="corner" d="M290 660 L290 690 L260 690" />
+      <path class="corner" d="M40 690 L10 690 L10 660" />
+
+      <!-- Realistic right-foot outline, top-down view:
+           heel at bottom, medial arch (inward curve) on the left,
+           five individual toes with valleys between them,
+           lateral edge (pinky side) on the right. -->
+      <g id="footGroup">
+        <path id="footPath" d="
+          M 150 662
+          C 98 664, 60 638, 58 585
+          C 56 542, 70 508, 52 468
+          C 40 425, 46 378, 56 332
+          C 60 288, 52 248, 62 212
+          C 68 185, 78 164, 88 154
+          C 82 128, 76 96, 84 70
+          C 90 48, 112 42, 122 62
+          C 125 82, 125 100, 126 118
+          C 130 102, 138 78, 148 66
+          C 158 52, 170 58, 172 80
+          C 173 100, 174 114, 176 124
+          C 180 110, 188 86, 196 76
+          C 206 64, 216 70, 216 90
+          C 216 108, 214 120, 215 132
+          C 220 118, 228 102, 236 100
+          C 246 98, 252 112, 248 130
+          C 246 142, 241 152, 240 164
+          C 248 192, 244 228, 244 268
+          C 244 318, 242 368, 240 418
+          C 238 466, 234 514, 228 558
+          C 222 600, 206 636, 182 652
+          C 168 660, 158 663, 150 662 Z
+        " />
+
+        <!-- Subtle anatomical detail: arch indicator line -->
+        <path d="M 75 340 Q 95 410, 78 475" fill="none" stroke="var(--lime)"
+              stroke-width="1" stroke-dasharray="2 4" opacity="0.35" />
+
+        <!-- Small toe-tip target dots -->
+        <circle cx="105" cy="56"  r="3" fill="var(--lime)" opacity="0.7"/>
+        <circle cx="158" cy="62"  r="2.5" fill="var(--lime)" opacity="0.7"/>
+        <circle cx="185" cy="72"  r="2.5" fill="var(--lime)" opacity="0.7"/>
+        <circle cx="208" cy="82"  r="2" fill="var(--lime)" opacity="0.7"/>
+        <circle cx="240" cy="112" r="2" fill="var(--lime)" opacity="0.7"/>
+      </g>
+    </svg>
+  </div>
+
+  <div class="scan-line" id="scanLine"></div>
+
+  <div class="scan-overlay">
+    <div class="scan-top">
+      <span class="live">CAPTURING</span>
+      <span id="rotationReadout">0°/s</span>
+      <button class="flip-btn" id="flipBtn" aria-label="Flip foot left/right">L / R</button>
+      <button class="close-btn" id="closeBtn">✕</button>
+    </div>
+
+    <div class="scan-bottom">
+      <div class="status-row">
+        <span>Alignment <span class="val" id="alignStatus">ALIGNED</span></span>
+        <span>Speed <span class="val" id="speedStatus">STEADY</span></span>
+      </div>
+      <div class="status-bar"></div>
+      <div class="instruction" id="instruction">Slowly rotate around <em>your foot.</em></div>
+    </div>
+  </div>
+
+  <!-- Hidden canvas for frame analysis -->
+  <canvas id="analysisCanvas" width="160" height="120"></canvas>
+</section>
+
+<!-- Toast popup -->
+<div class="toast" id="toast">
+  <div class="toast-title">Slow down</div>
+  <div class="toast-sub">You're rotating too fast</div>
+</div>
+
+<!-- Full-screen flash for visual feedback -->
+<div class="flash" id="flash"></div>
+
+<script>
+/* =======================================================
+   FOOTSCAN — main script
+   ======================================================= */
+
+const $ = (id) => document.getElementById(id);
+
+const welcomeEl    = $('welcome');
+const scanEl       = $('scan');
+const videoEl      = $('video');
+const startBtn     = $('startBtn');
+const closeBtn     = $('closeBtn');
+const flipBtn      = $('flipBtn');
+const errorMsg     = $('errorMsg');
+const toast        = $('toast');
+const flashEl      = $('flash');
+const footFrame    = $('footFrame');
+const alignStatus  = $('alignStatus');
+const speedStatus  = $('speedStatus');
+const instruction  = $('instruction');
+const rotationReadout = $('rotationReadout');
+const hapticsSpec  = $('hapticsSpec');
+const analysisCanvas  = $('analysisCanvas');
+const analysisCtx  = analysisCanvas.getContext('2d', { willReadFrequently: true });
+
+/* ---------- VIBRATION SUPPORT DETECTION ---------- */
+const VIBRATE_SUPPORTED = ('vibrate' in navigator) && typeof navigator.vibrate === 'function';
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+// Update welcome screen haptic status
+if (!VIBRATE_SUPPORTED) {
+  hapticsSpec.textContent = IS_IOS ? 'iOS (unsupported)' : 'Unsupported';
+  hapticsSpec.style.color = 'var(--warn)';
+} else {
+  hapticsSpec.textContent = 'Enabled';
+}
+
+/* Vibration patterns — timings in ms. [vibrate, pause, vibrate, ...] */
+const VIBE = {
+  test:       [80],                  // single short test buzz on start
+  outOfFrame: [200, 100, 200],       // two medium pulses
+  tooFast:    [120, 80, 120]         // quick double pulse
+};
+
+const state = {
+  stream: null,
+  scanning: false,
+  rafId: null,
+  outOfFrame: false,
+  lastOutOfFrameVibe: 0,
+  lastFastVibe: 0,
+  baselineEdge: null,
+  lastOrientation: null,
+  lastOrientationTime: 0,
+  currentAngularSpeed: 0
+};
+
+/* ---------- SCREEN SWITCHING ---------- */
+function showScreen(which) {
+  [welcomeEl, scanEl].forEach(s => s.classList.remove('active'));
+  which.classList.add('active');
+}
+
+/* ---------- FLIP L/R ---------- */
+flipBtn.addEventListener('click', () => {
+  footFrame.classList.toggle('flipped');
+});
+
+/* ---------- START SCAN ---------- */
+startBtn.addEventListener('click', async () => {
+  errorMsg.textContent = '';
+  startBtn.disabled = true;
+  startBtn.querySelector('span').textContent = 'Requesting camera…';
+
+  // ★ Trigger a TEST vibration immediately on this user gesture.
+  //   If you feel this buzz, your phone supports vibration and you'll
+  //   feel the scan alerts too. If you don't feel it here, no web page
+  //   will ever make your phone buzz (almost always because you're on iOS).
+  vibratePattern(VIBE.test);
+
+  try {
+    // iOS 13+ requires explicit motion permission from a user gesture
+    if (typeof DeviceMotionEvent !== 'undefined' &&
+        typeof DeviceMotionEvent.requestPermission === 'function') {
+      try { await DeviceMotionEvent.requestPermission(); } catch(e) {}
+    }
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      try { await DeviceOrientationEvent.requestPermission(); } catch(e) {}
+    }
+
+    // Request rear camera
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width:  { ideal: 1280 },
+        height: { ideal: 720 }
+      },
+      audio: false
+    });
+
+    state.stream = stream;
+    videoEl.srcObject = stream;
+    await videoEl.play();
+
+    showScreen(scanEl);
+    startScanLoop();
+  } catch (err) {
+    console.error(err);
+    errorMsg.textContent = friendlyError(err);
+    startBtn.disabled = false;
+    startBtn.querySelector('span').textContent = 'Start foot scan';
+  }
+});
+
+function friendlyError(err) {
+  if (!err) return 'Could not start scan.';
+  if (err.name === 'NotAllowedError') return 'Camera permission denied. Enable it in settings.';
+  if (err.name === 'NotFoundError')  return 'No camera found on this device.';
+  if (err.name === 'NotReadableError') return 'Camera is busy. Close other camera apps.';
+  if (location.protocol === 'http:' && location.hostname !== 'localhost') {
+    return 'Camera needs HTTPS. GitHub Pages uses HTTPS by default.';
+  }
+  return (err.message || 'Scan failed.') + '';
+}
+
+/* ---------- CLOSE SCAN ---------- */
+closeBtn.addEventListener('click', stopScan);
+
+function stopScan() {
+  state.scanning = false;
+  if (state.rafId) cancelAnimationFrame(state.rafId);
+  if (state.stream) {
+    state.stream.getTracks().forEach(t => t.stop());
+    state.stream = null;
+  }
+  window.removeEventListener('deviceorientation', handleOrientation);
+  state.baselineEdge = null;
+  state.lastOrientation = null;
+  showScreen(welcomeEl);
+  startBtn.disabled = false;
+  startBtn.querySelector('span').textContent = 'Start foot scan';
+}
+
+/* ---------- SCAN LOOP + FRAME ANALYSIS ---------- */
+function startScanLoop() {
+  state.scanning = true;
+  state.baselineEdge = null;
+  window.addEventListener('deviceorientation', handleOrientation);
+
+  const tick = () => {
+    if (!state.scanning) return;
+    analyzeFrame();
+    state.rafId = requestAnimationFrame(tick);
+  };
+  state.rafId = requestAnimationFrame(tick);
+}
+
+/*
+ * Heuristic foot-in-frame detection.
+ *
+ * We downscale the video to a small canvas, then measure "content"
+ * (brightness variance + edge energy) in the outer border strips
+ * versus the center. When the foot drifts outside the dashed guide,
+ * those outer strips pick up significantly more structured content
+ * than the initial calibration baseline, and we flag out-of-frame.
+ *
+ * NOTE: this is a demo heuristic, not a foot detector. For production,
+ * swap in a TensorFlow.js / MediaPipe foot-segmentation model.
+ */
+function analyzeFrame() {
+  if (videoEl.readyState < 2) return;
+
+  const W = analysisCanvas.width;
+  const H = analysisCanvas.height;
+  analysisCtx.drawImage(videoEl, 0, 0, W, H);
+  const { data } = analysisCtx.getImageData(0, 0, W, H);
+
+  // Border strip width (10% of width/height)
+  const bx = Math.max(1, Math.floor(W * 0.10));
+  const by = Math.max(1, Math.floor(H * 0.10));
+
+  const edgeEnergy = computeEdgeEnergy(data, W, H, bx, by);
+
+  // Calibrate baseline after ~1 second (avoid first-frame noise)
+  if (state.baselineEdge === null) {
+    if (!state._calibFrames) state._calibFrames = [];
+    state._calibFrames.push(edgeEnergy);
+    if (state._calibFrames.length >= 20) {
+      state._calibFrames.sort((a,b) => a-b);
+      // median as baseline
+      state.baselineEdge = state._calibFrames[Math.floor(state._calibFrames.length/2)];
+      state._calibFrames = null;
+    }
+    return;
+  }
+
+  // Out-of-frame if edge activity outside the frame >> baseline
+  const ratio = edgeEnergy / Math.max(1, state.baselineEdge);
+  const nowOut = ratio > 2.2;   // threshold, tune as needed
+
+  if (nowOut && !state.outOfFrame) {
+    state.outOfFrame = true;
+    triggerOutOfFrame();
+  } else if (!nowOut && state.outOfFrame) {
+    state.outOfFrame = false;
+    triggerInFrame();
+  }
+}
+
+function computeEdgeEnergy(data, W, H, bx, by) {
+  // Sum of absolute horizontal gradient of luminance across outer border strips.
+  let sum = 0, n = 0;
+  const lum = (i) => 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+
+  const sample = (x, y) => {
+    if (x < 1 || x >= W-1) return;
+    const i  = (y * W + x) * 4;
+    const iL = (y * W + (x-1)) * 4;
+    const iR = (y * W + (x+1)) * 4;
+    sum += Math.abs(lum(iR) - lum(iL));
+    n++;
+  };
+
+  // top & bottom strips
+  for (let y = 0; y < by; y++) for (let x = 0; x < W; x += 2) sample(x, y);
+  for (let y = H - by; y < H; y++) for (let x = 0; x < W; x += 2) sample(x, y);
+  // left & right strips
+  for (let x = 0; x < bx; x++) for (let y = by; y < H - by; y += 2) sample(x, y);
+  for (let x = W - bx; x < W; x++) for (let y = by; y < H - by; y += 2) sample(x, y);
+
+  return n ? sum / n : 0;
+}
+
+/* ---------- OUT-OF-FRAME FEEDBACK ---------- */
+function triggerOutOfFrame() {
+  footFrame.classList.add('alert');
+  alignStatus.textContent = 'OUT OF FRAME';
+  alignStatus.classList.add('warn');
+  instruction.innerHTML = 'Move your <em>foot</em> back inside the outline.';
+
+  // Two medium pulses
+  vibratePattern(VIBE.outOfFrame);
+  flashScreen();
+}
+function triggerInFrame() {
+  footFrame.classList.remove('alert');
+  alignStatus.textContent = 'ALIGNED';
+  alignStatus.classList.remove('warn');
+  instruction.innerHTML = 'Slowly rotate around <em>your foot.</em>';
+}
+
+/* ---------- ROTATION SPEED VIA ORIENTATION ---------- */
+function handleOrientation(e) {
+  const now = performance.now();
+  const current = {
+    alpha: e.alpha ?? 0,
+    beta:  e.beta  ?? 0,
+    gamma: e.gamma ?? 0
+  };
+
+  if (state.lastOrientation && state.lastOrientationTime) {
+    const dt = (now - state.lastOrientationTime) / 1000;
+    if (dt > 0.016 && dt < 1) {
+      const dA = angularDelta(state.lastOrientation.alpha, current.alpha);
+      const dB = angularDelta(state.lastOrientation.beta,  current.beta);
+      const dG = angularDelta(state.lastOrientation.gamma, current.gamma);
+      const total = Math.sqrt(dA*dA + dB*dB + dG*dG);
+      const speed = total / dt; // deg/sec
+
+      // Smooth
+      state.currentAngularSpeed = state.currentAngularSpeed * 0.7 + speed * 0.3;
+      rotationReadout.textContent = `${Math.round(state.currentAngularSpeed)}°/s`;
+
+      const FAST_THRESHOLD = 90;    // deg/sec
+      const STEADY_RESET   = 45;
+
+      if (state.currentAngularSpeed > FAST_THRESHOLD) {
+        speedStatus.textContent = 'TOO FAST';
+        speedStatus.classList.add('warn');
+        maybeTriggerSlowDown();
+      } else if (state.currentAngularSpeed < STEADY_RESET) {
+        speedStatus.textContent = 'STEADY';
+        speedStatus.classList.remove('warn');
+      }
+    }
+  }
+
+  state.lastOrientation = current;
+  state.lastOrientationTime = now;
+}
+
+function angularDelta(a, b) {
+  let d = b - a;
+  if (d > 180)  d -= 360;
+  if (d < -180) d += 360;
+  return d;
+}
+
+function maybeTriggerSlowDown() {
+  const now = performance.now();
+  if (now - state.lastFastVibe < 1800) return; // debounce
+  state.lastFastVibe = now;
+  vibratePattern(VIBE.tooFast);   // double pulse
+  flashScreen();
+  showToast();
+}
+
+/* ---------- TOAST ---------- */
+function showToast() {
+  toast.classList.add('show');
+  clearTimeout(state._toastTimer);
+  state._toastTimer = setTimeout(() => {
+    toast.classList.remove('show');
+  }, 1500);
+}
+
+/* ---------- VIBRATION WRAPPER ---------- */
+function vibratePattern(pattern) {
+  if (!VIBRATE_SUPPORTED) return false;
+  try {
+    // Some browsers require canceling any previous vibration first
+    navigator.vibrate(0);
+    const ok = navigator.vibrate(pattern);
+    return ok;
+  } catch(e) {
+    console.warn('vibrate failed:', e);
+    return false;
+  }
+}
+
+/* ---------- VISUAL FLASH FALLBACK ---------- */
+function flashScreen() {
+  flashEl.classList.remove('pulse');
+  // Force reflow to restart animation
+  void flashEl.offsetWidth;
+  flashEl.classList.add('pulse');
+}
+
+/* ---------- Handle tab visibility / unload ---------- */
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && state.scanning) {
+    // pause but don't tear down
+  }
+});
+window.addEventListener('pagehide', () => {
+  if (state.stream) state.stream.getTracks().forEach(t => t.stop());
+});
+</script>
+</body>
+</html>
